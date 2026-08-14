@@ -37,7 +37,7 @@ func main() {
 	r.Use(func(c *gin.Context) {
 		c.Writer.Header().Set(
 			"Access-Control-Allow-Origin",
-			"https://live-polling-app-1-gqq9.onrender.com",
+			"https://live-polling-app-1-gqo9.onrender.com",
 		)
 
 		c.Writer.Header().Set(
