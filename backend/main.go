@@ -37,7 +37,7 @@ func main() {
 	r.Use(func(c *gin.Context) {
 		c.Writer.Header().Set(
 			"Access-Control-Allow-Origin",
-			"http://localhost:5173",
+			"https://live-polling-app-1-gqq9.onrender.com",
 		)
 
 		c.Writer.Header().Set(
@@ -62,11 +62,6 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{
 			"message": "Live Polling API is running!",
 		})
-	})
-
-	// Added for Render health check
-	r.HEAD("/", func(c *gin.Context) {
-		c.Status(http.StatusOK)
 	})
 
 	r.POST("/api/signup", handlers.Signup)
