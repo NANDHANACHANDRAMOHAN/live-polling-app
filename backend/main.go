@@ -25,12 +25,11 @@ func main() {
 		panic(err)
 	}
 
-    
-    // Connect to Redis
+	// Connect to Redis
 	err = config.ConnectRedis()
-    if err != nil {
-	    panic(err)
-    }
+	if err != nil {
+		panic(err)
+	}
 
 	r := gin.Default()
 
@@ -65,9 +64,14 @@ func main() {
 		})
 	})
 
+	// Added for Render health check
+	r.HEAD("/", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
 	r.POST("/api/signup", handlers.Signup)
-	
-    r.POST("/api/login", handlers.Login)
+
+	r.POST("/api/login", handlers.Login)
 
 	r.POST("/api/polls", handlers.CreatePoll)
 
