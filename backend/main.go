@@ -1,3 +1,4 @@
+
 package main
 
 import (
@@ -9,6 +10,7 @@ import (
 
 	"live-polling-app/config"
 	"live-polling-app/handlers"
+	"live-polling-app/middleware"
 )
 
 func main() {
@@ -35,9 +37,10 @@ func main() {
 
 	// CORS
 	r.Use(func(c *gin.Context) {
+
 		c.Writer.Header().Set(
 			"Access-Control-Allow-Origin",
-			"https://live-polling-app-1-gqq9.onrender.com",
+			"http://localhost:5173",
 		)
 
 		c.Writer.Header().Set(
@@ -47,7 +50,7 @@ func main() {
 
 		c.Writer.Header().Set(
 			"Access-Control-Allow-Headers",
-			"Content-Type",
+			"Content-Type, Authorization",
 		)
 
 		if c.Request.Method == "OPTIONS" {
@@ -58,27 +61,42 @@ func main() {
 		c.Next()
 	})
 
+	// Root
 	r.GET("/", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"message": "Live Polling API is running!",
 		})
 	})
 
-	r.POST("/api/signup", handlers.Signup)
+	// =========================
+	// PUBLIC AUTH ROUTES
+	// =========================
 
+	r.POST("/api/signup", handlers.Signup)
 	r.POST("/api/login", handlers.Login)
 
-	r.POST("/api/polls", handlers.CreatePoll)
+	// =========================
+	// PUBLIC POLL ROUTES
+	// =========================
 
 	r.GET("/api/polls", handlers.GetLatestPoll)
-
 	r.GET("/api/polls/:id", handlers.GetPoll)
 
-	r.POST("/api/polls/:id/vote", handlers.VotePoll)
-
 	r.GET("/api/polls/:id/stream", handlers.PollStream)
+
+	// =========================
+	// PROTECTED POLL ROUTES
+	// =========================
+
+	protected := r.Group("/api")
+	protected.Use(middleware.JWTAuth())
+
+	protected.POST("/polls", handlers.CreatePoll)
+	protected.POST("/polls/:id/vote", handlers.VotePoll)
+	
 
 	fmt.Println("Server starting on http://localhost:8080")
 
 	r.Run(":8080")
 }
+

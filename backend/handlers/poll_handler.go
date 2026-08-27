@@ -18,8 +18,12 @@ type VoteRequest struct {
 	OptionID string `json:"optionId"`
 }
 
+// =========================================================
 // CREATE POLL
+// =========================================================
+
 func CreatePoll(c *gin.Context) {
+
 	var poll models.Poll
 
 	if err := c.ShouldBindJSON(&poll); err != nil {
@@ -54,10 +58,38 @@ func CreatePoll(c *gin.Context) {
 
 	collection := config.DB.Collection("polls")
 
+	// Save poll to MongoDB
 	_, err := collection.InsertOne(ctx, poll)
+
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to save poll",
+		})
+		return
+	}
+
+	// =====================================================
+	// SEND NEW POLL THROUGH REDIS
+	// =====================================================
+
+	pollJSON, err := json.Marshal(poll)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to prepare poll update",
+		})
+		return
+	}
+
+	_, err = config.RedisClient.Publish(
+		ctx,
+		"polls",
+		string(pollJSON),
+	).Result()
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Poll created but Redis update failed",
 		})
 		return
 	}
@@ -68,8 +100,12 @@ func CreatePoll(c *gin.Context) {
 	})
 }
 
+// =========================================================
 // GET LATEST POLL
+// =========================================================
+
 func GetLatestPoll(c *gin.Context) {
+
 	ctx, cancel := context.WithTimeout(
 		context.Background(),
 		10*time.Second,
@@ -81,7 +117,9 @@ func GetLatestPoll(c *gin.Context) {
 	var poll models.Poll
 
 	opts := options.FindOne().SetSort(
-		bson.M{"createdAt": -1},
+		bson.M{
+			"createdAt": -1,
+		},
 	)
 
 	err := collection.FindOne(
@@ -102,8 +140,12 @@ func GetLatestPoll(c *gin.Context) {
 	})
 }
 
+// =========================================================
 // GET POLL BY ID
+// =========================================================
+
 func GetPoll(c *gin.Context) {
+
 	pollID := c.Param("id")
 
 	ctx, cancel := context.WithTimeout(
@@ -118,7 +160,9 @@ func GetPoll(c *gin.Context) {
 
 	err := collection.FindOne(
 		ctx,
-		bson.M{"_id": pollID},
+		bson.M{
+			"_id": pollID,
+		},
 	).Decode(&poll)
 
 	if err != nil {
@@ -133,8 +177,12 @@ func GetPoll(c *gin.Context) {
 	})
 }
 
+// =========================================================
 // VOTE POLL
+// =========================================================
+
 func VotePoll(c *gin.Context) {
+
 	var vote VoteRequest
 
 	if err := c.ShouldBindJSON(&vote); err != nil {
@@ -162,7 +210,7 @@ func VotePoll(c *gin.Context) {
 	collection := config.DB.Collection("polls")
 
 	filter := bson.M{
-		"_id":         pollID,
+		"_id":        pollID,
 		"options.id": vote.OptionID,
 	}
 
@@ -192,12 +240,17 @@ func VotePoll(c *gin.Context) {
 		return
 	}
 
-	// Get updated poll
+	// =====================================================
+	// GET UPDATED POLL
+	// =====================================================
+
 	var updatedPoll models.Poll
 
 	err = collection.FindOne(
 		ctx,
-		bson.M{"_id": pollID},
+		bson.M{
+			"_id": pollID,
+		},
 	).Decode(&updatedPoll)
 
 	if err != nil {
@@ -207,7 +260,10 @@ func VotePoll(c *gin.Context) {
 		return
 	}
 
-	// Send updated poll through Redis
+	// =====================================================
+	// SEND UPDATED POLL THROUGH REDIS
+	// =====================================================
+
 	pollJSON, err := json.Marshal(updatedPoll)
 
 	if err != nil {
@@ -236,21 +292,31 @@ func VotePoll(c *gin.Context) {
 	})
 }
 
+// =========================================================
 // LIVE POLL STREAM
+// =========================================================
+
 func PollStream(c *gin.Context) {
+
 	pollID := c.Param("id")
 
 	ctx := c.Request.Context()
 
+	// =====================================================
+	// SUBSCRIBE TO REDIS CHANNELS
+	// =====================================================
+
 	pubsub := config.RedisClient.Subscribe(
 		ctx,
 		"poll:"+pollID,
+		"polls",
 	)
 
 	defer pubsub.Close()
 
 	// Make sure Redis subscription is ready
 	_, err := pubsub.Receive(ctx)
+
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Redis subscription failed",
@@ -258,28 +324,63 @@ func PollStream(c *gin.Context) {
 		return
 	}
 
-	c.Header("Content-Type", "text/event-stream")
-	c.Header("Cache-Control", "no-cache")
-	c.Header("Connection", "keep-alive")
-	c.Header("Access-Control-Allow-Origin", "http://localhost:5173")
+	// =====================================================
+	// SSE HEADERS
+	// =====================================================
+
+	c.Header(
+		"Content-Type",
+		"text/event-stream",
+	)
+
+	c.Header(
+		"Cache-Control",
+		"no-cache",
+	)
+
+	c.Header(
+		"Connection",
+		"keep-alive",
+	)
+
+	c.Header(
+		"Access-Control-Allow-Origin",
+		"http://localhost:5173",
+	)
 
 	// Tell browser that live connection is ready
-	c.SSEvent("connected", "true")
+	c.SSEvent(
+		"connected",
+		"true",
+	)
+
 	c.Writer.Flush()
 
 	messageChannel := pubsub.Channel()
 
+	// =====================================================
+	// LISTEN FOR REDIS MESSAGES
+	// =====================================================
+
 	for {
+
 		select {
+
 		case <-ctx.Done():
 			return
 
 		case message, ok := <-messageChannel:
+
 			if !ok {
 				return
 			}
 
-			c.SSEvent("poll", message.Payload)
+			// Send Redis payload to frontend
+			c.SSEvent(
+				"poll",
+				message.Payload,
+			)
+
 			c.Writer.Flush()
 		}
 	}
