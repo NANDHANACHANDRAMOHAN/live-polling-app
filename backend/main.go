@@ -1,4 +1,3 @@
-
 package main
 
 import (
@@ -38,10 +37,16 @@ func main() {
 	// CORS
 	r.Use(func(c *gin.Context) {
 
-		c.Writer.Header().Set(
-			"Access-Control-Allow-Origin",
-			"http://localhost:5173",
-		)
+		origin := c.GetHeader("Origin")
+
+		if origin == "http://localhost:5173" ||
+			origin == "https://live-polling-app-1-gqo9.onrender.com" {
+
+			c.Writer.Header().Set(
+				"Access-Control-Allow-Origin",
+				origin,
+			)
+		}
 
 		c.Writer.Header().Set(
 			"Access-Control-Allow-Methods",
@@ -81,7 +86,6 @@ func main() {
 
 	r.GET("/api/polls", handlers.GetLatestPoll)
 	r.GET("/api/polls/:id", handlers.GetPoll)
-
 	r.GET("/api/polls/:id/stream", handlers.PollStream)
 
 	// =========================
@@ -93,10 +97,8 @@ func main() {
 
 	protected.POST("/polls", handlers.CreatePoll)
 	protected.POST("/polls/:id/vote", handlers.VotePoll)
-	
 
 	fmt.Println("Server starting on http://localhost:8080")
 
 	r.Run(":8080")
 }
-
