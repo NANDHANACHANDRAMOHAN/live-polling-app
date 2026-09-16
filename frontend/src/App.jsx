@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 
 import "./App.css";
 
-const API = "http://localhost:8080";
+const API = "https://live-polling-backend-evrq.onrender.com";
 
 function App() {
   // =========================================================
